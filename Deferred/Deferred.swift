@@ -9,7 +9,7 @@
 import Foundation
 
 // TODO: Replace this with a class var
-private var DeferredDefaultQueue = DispatchQueue.global(priority: DispatchQueue.GlobalQueuePriority.default)
+private var DeferredDefaultQueue = DispatchQueue.global(qos: DispatchQoS.default.qosClass)
 
 open class Deferred<T> {
     typealias UponBlock = (DispatchQueue, (T) -> ())
@@ -82,7 +82,7 @@ extension Deferred {
         var result: T!
         group.enter()
         self.upon { result = $0; group.leave() }
-        group.wait(timeout: DispatchTime.distantFuture)
+        let _ = group.wait(timeout: DispatchTime.distantFuture)
         return result
     }
 }
