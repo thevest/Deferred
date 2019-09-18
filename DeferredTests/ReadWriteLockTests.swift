@@ -9,11 +9,11 @@
 import XCTest
 import Deferred
 
-func timeIntervalSleep(duration: NSTimeInterval) {
-    usleep(useconds_t(duration * NSTimeInterval(USEC_PER_SEC)))
+func timeIntervalSleep(duration: TimeInterval) {
+  usleep(useconds_t(duration * TimeInterval(USEC_PER_SEC)))
 }
 
-class PerfTestThread: NSThread {
+class PerfTestThread: Thread {
     let iters: Int
     var lock: ReadWriteLock
     let joinLock = NSConditionLock(condition: 0)
@@ -34,11 +34,11 @@ class PerfTestThread: NSThread {
                 lock.withReadLock(doNothing)
             }
         }
-        joinLock.unlockWithCondition(1)
+      joinLock.unlock(withCondition: 1)
     }
 
     func join() {
-        joinLock.lockWhenCondition(1)
+      joinLock.lock(whenCondition: 1)
         joinLock.unlock()
     }
 }
@@ -47,7 +47,7 @@ class ReadWriteLockTests: XCTestCase {
     var gcdLock: GCDReadWriteLock!
     var spinLock: SpinLock!
     var casSpinLock: CASSpinLock!
-    var queue: dispatch_queue_t!
+    var queue: DispatchQueue!
 
     override func setUp() {
         super.setUp()
@@ -56,7 +56,7 @@ class ReadWriteLockTests: XCTestCase {
         spinLock = SpinLock()
         casSpinLock = CASSpinLock()
 
-        queue = dispatch_queue_create("ReadWriteLockTests", DISPATCH_QUEUE_CONCURRENT)
+      queue = DispatchQueue(label: "ReadWriteLockTests", qos: .default, attributes: .concurrent)
     }
     
     override func tearDown() {
@@ -67,45 +67,45 @@ class ReadWriteLockTests: XCTestCase {
     func testMultipleConcurrentReaders() {
         // do not test spinLock, as it does not allow concurrent reading
         let locks: [ReadWriteLock] = [gcdLock, casSpinLock]
-        for (var lock) in locks {
+        for lock in locks {
             // start up 32 readers that block for 0.1 seconds each...
-            for i in 0 ..< 32 {
-                let expectation = expectationWithDescription("read \(lock)")
-                dispatch_async(queue) {
+            for _ in 0 ..< 32 {
+              let exp = expectation(description: "read \(lock)")
+              queue.async() {
                     lock.withReadLock {
-                        timeIntervalSleep(0.1)
-                        expectation.fulfill()
+                      timeIntervalSleep(duration: 0.1)
+                        exp.fulfill()
                     }
                 }
             }
 
             // and make sure all 32 complete in < 3 second. If the readers
             // did not run concurrently, they would take >= 3.2 seconds
-            waitForExpectationsWithTimeout(3, handler: nil)
+          waitForExpectations(timeout: 3, handler: nil)
         }
     }
 
     func testMultipleConcurrentWriters() {
         // all three lock types ensure writes happen exclusively
         let locks: [ReadWriteLock] = [gcdLock, casSpinLock, spinLock]
-        for (var lock) in locks {
+      for lock in locks {
             var x: Int32 = 0
 
             // spin up 5 writers concurrently...
             for i in 0 ..< 5 {
-                let expectation = expectationWithDescription("write \(lock) #\(i)")
-                dispatch_async(queue) {
+              let exp = expectation(description: "write \(lock) #\(i)")
+              queue.async() {
                     lock.withWriteLock {
                         // ... and make sure each runs in order by checking that
                         // no two blocks increment x at the same time
                         XCTAssertEqual(OSAtomicIncrement32Barrier(&x), 1)
-                        timeIntervalSleep(0.05)
+                      timeIntervalSleep(duration: 0.05)
                         XCTAssertEqual(OSAtomicDecrement32Barrier(&x), 0)
-                        expectation.fulfill()
+                        exp.fulfill()
                     }
                 }
             }
-            waitForExpectationsWithTimeout(5, handler: nil)
+          waitForExpectations(timeout: 5, handler: nil)
         }
     }
 
@@ -117,8 +117,8 @@ class ReadWriteLockTests: XCTestCase {
             var x: Int32 = 0
 
             let startReader: (Int) -> () = { i in
-                let expectation = self.expectationWithDescription("reader \(i)")
-                dispatch_async(self.queue) {
+              let expectation = self.expectation(description: "reader \(i)")
+              self.queue.async() {
                     lock.withReadLock {
                         // make sure we get the value of x either before or after
                         // the writer runs, never a partway-through value
@@ -133,14 +133,14 @@ class ReadWriteLockTests: XCTestCase {
                 startReader(i)
             }
             // spin up a writer that (slowly) increments x from 0 to 5
-            let expectation = expectationWithDescription("writer")
-            dispatch_async(queue) {
+          let exp = expectation(description: "writer")
+          queue.async() {
                 lock.withWriteLock {
                     for i in 0 ..< 5 {
                         OSAtomicIncrement32Barrier(&x)
-                        timeIntervalSleep(0.1)
+                      timeIntervalSleep(duration: 0.1)
                     }
-                    expectation.fulfill()
+                    exp.fulfill()
                 }
             }
             // and spin up 32 more readers after
@@ -148,7 +148,7 @@ class ReadWriteLockTests: XCTestCase {
                 startReader(i)
             }
             
-            waitForExpectationsWithTimeout(5, handler: nil)
+          waitForExpectations(timeout: 5, handler: nil)
         }
     }
 

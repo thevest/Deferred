@@ -11,13 +11,13 @@ import Deferred
 
 class LockProtectedTests: XCTestCase {
     var protected: LockProtected<(NSDate?,[Int])>!
-    var queue: dispatch_queue_t!
+    var queue: DispatchQueue!
 
     override func setUp() {
         super.setUp()
 
         protected = LockProtected(item: (nil, []))
-        queue = dispatch_queue_create("LockProtectedTests", DISPATCH_QUEUE_CONCURRENT)
+      queue = DispatchQueue(label: "LockProtectedTests", qos: .default, attributes: .concurrent)
     }
     
     override func tearDown() {
@@ -29,8 +29,8 @@ class LockProtectedTests: XCTestCase {
         var lastWriterDate: NSDate?
 
         let startReader: (Int) -> () = { i in
-            let expectation = self.expectationWithDescription("reader \(i)")
-            dispatch_async(self.queue) {
+          let expectation = self.expectation(description: "reader \(i)")
+          self.queue.async() {
                 self.protected.withReadLock { (date,items) -> () in
                     if items.count == 0 && date == nil {
                         // OK - we're before the writer has added items
@@ -47,13 +47,13 @@ class LockProtectedTests: XCTestCase {
         for i in 0 ..< 64 {
             startReader(i)
         }
-        let expectation = self.expectationWithDescription("writer")
-        dispatch_async(self.queue) {
+      let expectation = self.expectation(description: "writer")
+      self.queue.async() {
             self.protected.withWriteLock { dateItemsTuple -> () in
                 for i in 0 ..< 5 {
-                    dateItemsTuple.0 = NSDate.date()
+                  dateItemsTuple.0 = NSDate()
                     dateItemsTuple.1.append(i)
-                    timeIntervalSleep(0.1)
+                  timeIntervalSleep(duration: 0.1)
                 }
                 lastWriterDate = dateItemsTuple.0
             }
@@ -63,7 +63,7 @@ class LockProtectedTests: XCTestCase {
             startReader(i)
         }
 
-        waitForExpectationsWithTimeout(10, handler: nil)
+      waitForExpectations(timeout: 10, handler: nil)
     }
 
 }

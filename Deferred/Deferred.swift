@@ -9,7 +9,7 @@
 import Foundation
 
 // TODO: Replace this with a class var
-private var DeferredDefaultQueue = DispatchQueue.global(qos: DispatchQoS.default.qosClass)
+public var DeferredDefaultQueue = DispatchQueue.global(qos: DispatchQoS.default.qosClass)
 
 open class Deferred<T> {
     typealias UponBlock = (DispatchQueue, (T) -> ())
